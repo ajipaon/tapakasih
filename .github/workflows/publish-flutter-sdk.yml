@@ -1,0 +1,101 @@
+name: Publish Flutter SDK to pub.dev
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish (e.g., 1.0.0)"
+        required: true
+
+jobs:
+  publish-flutter:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: tapak_asih_flutter
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.16.0"
+          channel: "stable"
+          cache: true
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Verify formatting
+        run: dart format --set-exit-if-changed .
+
+      - name: Analyze code
+        run: flutter analyze
+
+      - name: Run tests
+        run: flutter test
+
+      - name: Get version from release or input
+        id: get_version
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            VERSION=${{ github.event.release.tag_name }}
+            echo "version=${VERSION#v}" >> $GITHUB_OUTPUT
+          else
+            VERSION=${{ github.event.inputs.version }}
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update version in pubspec.yaml
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          sed -i "s/^version: .*/version: $VERSION/g" pubspec.yaml
+
+      - name: Build plugin
+        run: flutter build apk --debug --target=./example/lib/main.dart
+
+      - name: Publish to pub.dev
+        run: flutter pub publish --force
+        env:
+          PUB_TOKEN: ${{ secrets.PUB_DEV_CREDENTIALS }}
+
+      - name: Create GitHub Release with package
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v1
+        with:
+          body: |
+            ## tapak_asih_flutter ${{ steps.get_version.outputs.version }}
+
+            Flutter plugin for TapakAsih activity tracking SDK.
+
+            ### Installation
+
+            ```yaml
+            dependencies:
+              tapak_asih_flutter: ^${{ steps.get_version.outputs.version }}
+            ```
+
+            ### Quick Start
+
+            ```dart
+            import 'package:tapak_asih_flutter/tapak_asih_flutter.dart';
+
+            void main() async {
+              final config = TapakAsihConfig(
+                developerToken: 'your_token',
+                enableDebugLogs: true,
+              );
+              await TapAsih.initialize(config);
+              
+              runApp(MyApp());
+            }
+            ```
+
+            See [README.md](tapak_asih_flutter/README.md) for full documentation.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
