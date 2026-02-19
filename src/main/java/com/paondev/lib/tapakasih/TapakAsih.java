@@ -40,6 +40,7 @@ public class TapakAsih {
     
     private static TapakAsih instance;
     private boolean isInitialized = false;
+    private boolean trackingEnabled = true; // Default to true
     
     private Context context;
     private TapakAsihConfig config;
@@ -110,6 +111,9 @@ public class TapakAsih {
         // Initialize API client
         this.apiClient = new ApiClient(tokenManager, config);
         
+        // Check activity demand status first
+        checkActivityDemand();
+        
         // Initialize activity tracker
         this.activityTracker = new ActivityTracker();
         application.registerActivityLifecycleCallbacks(activityTracker);
@@ -126,8 +130,38 @@ public class TapakAsih {
     }
     
     /**
+     * Check activity demand status from API
+     * Updates trackingEnabled flag based on server response
+     */
+    private void checkActivityDemand() {
+        executorService.execute(new Runnable() {
+            @Override
+            public void run() {
+                ActivityCheckResponse response = apiClient.checkActivityDemand();
+                
+                mainHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (response != null) {
+                            if (response.isTrackingRequired()) {
+                                trackingEnabled = true;
+                                Log.i(TAG, "Tracking is enabled by server (ON_DEMAND)");
+                            } else if (response.isTrackingDisabled()) {
+                                trackingEnabled = false;
+                                Log.i(TAG, "Tracking is disabled by server (NO_DEMAND)");
+                            }
+                        }
+                    }
+                });
+            }
+        });
+    }
+    
+    /**
      * Check if session ID exists and show dialog if not
-     * Note: Dialog is not shown if token is expired (no point requesting session ID if data can't be sent)
+     * Note: Dialog is not shown if:
+     * - Token is expired (no point requesting session ID if data can't be sent)
+     * - Tracking is disabled by server (NO_DEMAND)
      */
     public void checkSessionAndShowDialog() {
         if (!isInitialized) {
@@ -137,6 +171,14 @@ public class TapakAsih {
         
         // Don't show dialog if token is expired
         if (tokenManager.isTokenExpired()) {
+            return;
+        }
+        
+        // Don't show dialog if tracking is disabled by server
+        if (!trackingEnabled) {
+            if (config.isEnableDebugLogs()) {
+                Log.d(TAG, "Tracking is disabled by server, skipping session dialog");
+            }
             return;
         }
         
@@ -172,6 +214,14 @@ public class TapakAsih {
         
         if (pageName == null || pageName.trim().isEmpty()) {
             Log.w(TAG, "Page name cannot be null or empty");
+            return;
+        }
+        
+        // Check if tracking is enabled by server
+        if (!trackingEnabled) {
+            if (config.isEnableDebugLogs()) {
+                Log.d(TAG, "Tracking is disabled by server, skipping track: " + pageName);
+            }
             return;
         }
         

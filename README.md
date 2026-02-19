@@ -327,6 +327,34 @@ The SDK automatically handles token validation:
 
 **No manual intervention required** - the SDK handles everything automatically.
 
+### Activity Demand Check
+
+On first launch, the SDK automatically checks the activity demand status from the server:
+
+**Endpoint**: `GET https://api.pycompany.com/activity/check`
+
+**Response**:
+
+```json
+{
+  "status": "ON_DEMAND" | "NO_DEMAND"
+}
+```
+
+**Behavior**:
+
+- **ON_DEMAND**: Session ID is required for tracking
+  - SDK will show session dialog if no session ID exists
+  - Activity tracking is enabled
+  - User must provide session ID to use the app
+- **NO_DEMAND**: Session ID is NOT required
+  - SDK will NOT show session dialog
+  - Activity tracking is disabled
+  - User can use the app without session ID
+  - All `trackPage()` calls are silently ignored
+
+This check happens once during initialization. If the check fails, the SDK defaults to ON_DEMAND (safer option).
+
 ## Error Handling
 
 The SDK handles errors gracefully:

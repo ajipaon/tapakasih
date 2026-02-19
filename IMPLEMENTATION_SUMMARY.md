@@ -36,7 +36,8 @@ src/main/java/com/paondev/lib/tapakasih/
 - **Dual Authentication**: Developer token (auth) + User session ID (tracking)
 - **Network Layer**: OkHttp with retry mechanism (3 attempts, exponential backoff)
 - **Token Validation**: Automatically stops sending data if token expired (401/403)
-- **Smart Session Dialog**: Only shows session dialog when token is valid
+- **Activity Demand Check**: Checks server for ON_DEMAND/NO_DEMAND status on initialization
+- **Smart Session Dialog**: Only shows session dialog when token is valid and tracking is required
 - **Session Management**: SharedPreferences storage, dialog for user input
 - **Thread Safety**: Background thread for network operations
 - **Configurable**: Debug logs, offline queue, retry attempts

@@ -35,6 +35,58 @@ public class ApiClient {
     }
     
     /**
+     * Check activity demand status from API
+     * @return ActivityCheckResponse containing status, or null if request fails
+     */
+    public ActivityCheckResponse checkActivityDemand() {
+        String developerToken = tokenManager.getDeveloperToken();
+        if (developerToken == null) {
+            if (config.isEnableDebugLogs()) {
+                Log.w(TAG, "Developer token is null, cannot check activity demand");
+            }
+            // Default to ON_DEMAND (safer)
+            return new ActivityCheckResponse("ON_DEMAND");
+        }
+        
+        String url = Constants.BASE_URL + Constants.CHECK_ENDPOINT;
+        
+        try {
+            Request httpRequest = new Request.Builder()
+                    .url(url)
+                    .addHeader("Authorization", "Bearer " + developerToken)
+                    .get()
+                    .build();
+            
+            Response response = client.newCall(httpRequest).execute();
+            
+            if (response.isSuccessful()) {
+                String responseBody = response.body().string();
+                ActivityCheckResponse checkResponse = gson.fromJson(responseBody, ActivityCheckResponse.class);
+                
+                if (config.isEnableDebugLogs()) {
+                    Log.i(TAG, "Activity check successful: " + checkResponse.getStatus());
+                }
+                
+                response.close();
+                return checkResponse;
+            } else {
+                if (config.isEnableDebugLogs()) {
+                    Log.w(TAG, "Activity check failed: HTTP " + response.code());
+                }
+                response.close();
+                // Default to ON_DEMAND (safer)
+                return new ActivityCheckResponse("ON_DEMAND");
+            }
+        } catch (IOException e) {
+            if (config.isEnableDebugLogs()) {
+                Log.e(TAG, "Activity check error: " + e.getMessage());
+            }
+            // Default to ON_DEMAND (safer)
+            return new ActivityCheckResponse("ON_DEMAND");
+        }
+    }
+    
+    /**
      * Send activity data to API
      * @param request Activity request data
      * @return true if successful, false otherwise
