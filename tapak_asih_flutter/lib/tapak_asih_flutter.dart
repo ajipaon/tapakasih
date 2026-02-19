@@ -64,24 +64,9 @@ class TapAsih {
     return TapakAsihPlatform.instance.isInitialized();
   }
 
-  /// Check if developer token is expired
-  ///
-  /// Returns true if token is expired, false otherwise
-  static Future<bool> isTokenExpired() {
-    return TapakAsihPlatform.instance.isTokenExpired();
-  }
-
-  /// Check if SDK can perform tracking
-  ///
-  /// Returns true if SDK is initialized, has developer token, has session ID, and token is not expired
-  /// Returns false if tracking is not possible for any reason
-  static Future<bool> canTrack() {
-    return TapakAsihPlatform.instance.canTrack();
-  }
-
   /// Show session dialog manually
   ///
-  /// Displays the session ID input dialog to the user
+  /// Displays/// session ID input dialog to user
   static Future<void> showSessionDialog() {
     return TapakAsihPlatform.instance.showSessionDialog();
   }

@@ -279,12 +279,6 @@ String sessionId = TapAsih.getSessionId();
 // Check if initialized
 boolean initialized = TapAsih.isInitialized();
 
-// Check if token is expired
-boolean expired = TapAsih.isTokenExpired();
-
-// Check if SDK can perform tracking
-boolean canTrack = TapAsih.canTrack();
-
 // Show session dialog
 TapAsih.showSessionDialog();
 
@@ -313,12 +307,6 @@ final sessionId = await TapAsih.getSessionId();
 // Check if initialized
 final initialized = await TapAsih.isInitialized();
 
-// Check if token is expired
-final expired = await TapAsih.isTokenExpired();
-
-// Check if SDK can perform tracking
-final canTrack = await TapAsih.canTrack();
-
 // Show session dialog
 await TapAsih.showSessionDialog();
 
@@ -331,97 +319,20 @@ await TapAsih.destroy();
 
 ## Token Management
 
-### Developer Token
+The SDK automatically handles token validation:
 
-Obtained from your website and used for authentication. The SDK will stop sending data if the token is expired (HTTP 401/403).
+- If the developer token is valid: Data is sent to API
+- If the developer token is expired (HTTP 401/403): Data is not sent
+- When you update the developer token: SDK automatically resumes sending data
 
-### Session ID
-
-Obtained by users from your website and used to identify individual users.
-
-## Token Status Checking
-
-You can check the status of your developer token and whether the SDK can perform tracking.
-
-### Android
-
-```java
-// Check if token is expired
-boolean expired = TapAsih.isTokenExpired();
-
-// Check if SDK can perform tracking
-// Returns true if: initialized + has token + has session ID + token not expired
-boolean canTrack = TapAsih.canTrack();
-
-if (!canTrack) {
-    if (expired) {
-        // Token expired, need to update
-        Log.e("TapakAsih", "Developer token is expired");
-    } else {
-        // Other issue (not initialized, no token, or no session ID)
-        Log.e("TapakAsih", "Cannot track: " + TapAsih.getSessionId());
-    }
-} else {
-    // Safe to track
-    TapAsih.trackPage("PageName");
-}
-```
-
-### Flutter
-
-```dart
-// Check if token is expired
-final expired = await TapAsih.isTokenExpired();
-
-// Check if SDK can perform tracking
-// Returns true if: initialized + has token + has session ID + token not expired
-final canTrack = await TapAsih.canTrack();
-
-if (!canTrack) {
-    if (expired) {
-        // Token expired, need to update
-        print('Developer token is expired');
-    } else {
-        // Other issue (not initialized, no token, or no session ID)
-        print('Cannot track');
-    }
-} else {
-    // Safe to track
-    await TapAsih.trackPage('PageName');
-}
-```
-
-### Reset Expired Token
-
-If your developer token has expired and you have a new token:
-
-**Android:**
-
-```java
-TapakAsihConfig newConfig = new TapakAsihConfig.Builder("new_token")
-    .setEnableDebugLogs(true)
-    .build();
-TapakAsih.initialize(application, newConfig);
-// This will automatically reset the expired flag
-```
-
-**Flutter:**
-
-```dart
-final newConfig = TapakAsihConfig(
-  developerToken: 'new_token',
-  enableDebugLogs: true,
-);
-await TapAsih.initialize(newConfig);
-// This will automatically reset the expired flag
-```
+**No manual intervention required** - the SDK handles everything automatically.
 
 ## Error Handling
 
 The SDK handles errors gracefully:
 
 - **Network Errors**: Automatic retry with exponential backoff
-- **Expired Token**: SDK stops tracking and marks token as expired
+- **Expired Token**: SDK automatically stops sending data (no user action needed)
 - **Missing Session ID**: Shows dialog to user automatically
 - **Offline Mode**: Queues data for later transmission
 
@@ -460,11 +371,12 @@ The SDK handles errors gracefully:
 3. Ensure user has provided Session ID
 4. Check debug logs for errors
 
-### Token expired
+### Data not being sent
 
-- Verify token on your website
-- Update token in your app's code
-- Clear expired flag: `TapAsih.clearSessionId()`
+- Verify developer token is not expired on your website
+- If expired, update token in your app's code (SDK will automatically resume)
+- Ensure network connectivity
+- Check debug logs for API errors
 
 ### Session dialog not showing
 

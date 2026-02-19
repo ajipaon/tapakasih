@@ -50,17 +50,6 @@ abstract class TapakAsihPlatform extends PlatformInterface {
     throw UnimplementedError('isInitialized() has not been implemented.');
   }
 
-  /// Check if developer token is expired
-  Future<bool> isTokenExpired() {
-    throw UnimplementedError('isTokenExpired() has not been implemented.');
-  }
-
-  /// Check if SDK can perform tracking
-  /// Returns true if SDK is initialized, has developer token, has session ID, and token is not expired
-  Future<bool> canTrack() {
-    throw UnimplementedError('canTrack() has not been implemented.');
-  }
-
   /// Show session dialog
   Future<void> showSessionDialog() {
     throw UnimplementedError('showSessionDialog() has not been implemented.');

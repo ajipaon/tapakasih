@@ -36,18 +36,6 @@ class MethodChannelTapakAsih extends TapakAsihPlatform {
   }
 
   @override
-  Future<bool> isTokenExpired() async {
-    final result = await methodChannel.invokeMethod<bool>('isTokenExpired');
-    return result ?? false;
-  }
-
-  @override
-  Future<bool> canTrack() async {
-    final result = await methodChannel.invokeMethod<bool>('canTrack');
-    return result ?? false;
-  }
-
-  @override
   Future<void> showSessionDialog() async {
     await methodChannel.invokeMethod('showSessionDialog');
   }

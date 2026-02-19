@@ -31,8 +31,6 @@ class TapakAsihFlutterPlugin : FlutterPlugin, MethodCallHandler {
             "setSessionId" -> setSessionId(call, result)
             "getSessionId" -> getSessionId(result)
             "isInitialized" -> isInitialized(result)
-            "isTokenExpired" -> isTokenExpired(result)
-            "canTrack" -> canTrack(result)
             "showSessionDialog" -> showSessionDialog(result)
             "clearSessionId" -> clearSessionId(result)
             "destroy" -> destroy(result)
@@ -126,26 +124,6 @@ class TapakAsihFlutterPlugin : FlutterPlugin, MethodCallHandler {
         } catch (e: Exception) {
             Log.e(TAG, "Error checking initialization", e)
             result.error("CHECK_INIT_ERROR", e.message, null)
-        }
-    }
-
-    private fun isTokenExpired(result: Result) {
-        try {
-            val expired = TapakAsih.isTokenExpired()
-            result.success(expired)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error checking token expired", e)
-            result.error("CHECK_EXPIRED_ERROR", e.message, null)
-        }
-    }
-
-    private fun canTrack(result: Result) {
-        try {
-            val canTrack = TapakAsih.canTrack()
-            result.success(canTrack)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error checking can track", e)
-            result.error("CHECK_TRACK_ERROR", e.message, null)
         }
     }
 

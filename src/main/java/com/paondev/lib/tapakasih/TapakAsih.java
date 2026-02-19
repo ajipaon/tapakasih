@@ -127,10 +127,16 @@ public class TapakAsih {
     
     /**
      * Check if session ID exists and show dialog if not
+     * Note: Dialog is not shown if token is expired (no point requesting session ID if data can't be sent)
      */
     public void checkSessionAndShowDialog() {
         if (!isInitialized) {
             Log.w(TAG, "SDK is not initialized");
+            return;
+        }
+        
+        // Don't show dialog if token is expired
+        if (tokenManager.isTokenExpired()) {
             return;
         }
         
@@ -265,62 +271,6 @@ public class TapakAsih {
      */
     public static TapakAsihConfig getConfig() {
         return getInstance().config;
-    }
-    
-    /**
-     * Check if developer token is expired
-     * @return true if token is expired, false otherwise
-     */
-    public static boolean isTokenExpired() {
-        return getInstance().checkTokenExpired();
-    }
-    
-    /**
-     * Internal check token expired method
-     */
-    private boolean checkTokenExpired() {
-        if (!isInitialized) {
-            Log.w(TAG, "SDK is not initialized");
-            return true;
-        }
-        
-        return tokenManager.isTokenExpired();
-    }
-    
-    /**
-     * Check if SDK can perform tracking
-     * Returns true if SDK is initialized, has developer token, has session ID, and token is not expired
-     * @return true if tracking is possible, false otherwise
-     */
-    public static boolean canTrack() {
-        return getInstance().checkCanTrack();
-    }
-    
-    /**
-     * Internal check can track method
-     */
-    private boolean checkCanTrack() {
-        if (!isInitialized) {
-            Log.w(TAG, "SDK is not initialized");
-            return false;
-        }
-        
-        if (!tokenManager.hasDeveloperToken()) {
-            Log.w(TAG, "No developer token");
-            return false;
-        }
-        
-        if (!sessionManager.hasSessionId()) {
-            Log.w(TAG, "No session ID");
-            return false;
-        }
-        
-        if (tokenManager.isTokenExpired()) {
-            Log.w(TAG, "Token is expired");
-            return false;
-        }
-        
-        return true;
     }
     
     /**
