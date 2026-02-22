@@ -1,21 +1,27 @@
 plugins {
-    alias(libs.plugins.android.library)
+    id("com.android.library") version "4.2.2"
     `maven-publish`
 }
 
+repositories {
+    google()
+    mavenCentral()
+}
+
 android {
-    namespace = "com.paondev.lib.tapakasih"
-    compileSdk = 36
+    compileSdkVersion(30)
+    buildToolsVersion("30.0.3")
 
     defaultConfig {
-        minSdk = 21
+        minSdkVersion(21)
+        targetSdkVersion(30)
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")
     }
 
     buildTypes {
-        release {
+        getByName("release") {
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -30,8 +36,8 @@ android {
 }
 
 dependencies {
-    implementation(libs.androidx.appcompat)
-    implementation(libs.material)
+    implementation("androidx.appcompat:appcompat:1.6.1")
+    implementation("com.google.android.material:material:1.11.0")
     
     // OkHttp for networking
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
@@ -39,9 +45,9 @@ dependencies {
     // Gson for JSON serialization
     implementation("com.google.code.gson:gson:2.10.1")
     
-    testImplementation(libs.junit)
-    androidTestImplementation(libs.androidx.junit)
-    androidTestImplementation(libs.androidx.espresso.core)
+    testImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test.ext:junit:1.1.5")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
 }
 
 publishing {
@@ -51,7 +57,9 @@ publishing {
             artifactId = "tapakasih"
             version = "1.0.0"
 
-            from(components["release"])
+            afterEvaluate {
+                from(components["release"])
+            }
             
             pom {
                 name.set("TapakAsih SDK")
