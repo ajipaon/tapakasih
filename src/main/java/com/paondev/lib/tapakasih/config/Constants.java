@@ -5,7 +5,7 @@ package com.paondev.lib.tapakasih.config;
  */
 public class Constants {
     // Network
-    public static final String BASE_URL = "https://api.pycompany.com";
+    public static final String BASE_URL = "https://tapak-asih-sdk.ajisetiawan883.workers.dev";
     public static final String ACTIVITY_ENDPOINT = "/actifity/claim";
     public static final String CHECK_ENDPOINT = "/activity/check";
     public static final String CONTENT_TYPE = "application/json";
