@@ -1,27 +1,20 @@
 plugins {
-    id("com.android.library") version "4.2.2"
+    id("com.android.library") version "8.2.0"
     `maven-publish`
 }
 
-repositories {
-    google()
-    mavenCentral()
-}
-
 android {
-    compileSdkVersion(30)
-    buildToolsVersion("30.0.3")
+    namespace = "com.paondev.lib.tapakasih"
+    compileSdk = 34
 
     defaultConfig {
-        minSdkVersion(21)
-        targetSdkVersion(30)
-
+        minSdk = 21
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")
     }
 
     buildTypes {
-        getByName("release") {
+        release {
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -32,6 +25,13 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+    }
+    
+    publishing {
+        singleVariant("release") {
+            withSourcesJar()
+            withJavadocJar()
+        }
     }
 }
 
