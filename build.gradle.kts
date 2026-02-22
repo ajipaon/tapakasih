@@ -1,5 +1,5 @@
 plugins {
-    id("com.android.library") version "8.2.0"
+    id("com.android.library") version "8.2.2"
     `maven-publish`
 }
 
