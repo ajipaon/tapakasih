@@ -9,6 +9,7 @@ import com.paondev.lib.tapakasih.config.TapakAsihConfig;
 import com.paondev.lib.tapakasih.manager.SessionManager;
 import com.paondev.lib.tapakasih.manager.TokenManager;
 import com.paondev.lib.tapakasih.network.ActivityRequest;
+import com.paondev.lib.tapakasih.network.ActivityCheckResponse;
 import com.paondev.lib.tapakasih.network.ApiClient;
 import com.paondev.lib.tapakasih.tracker.ActivityTracker;
 import com.paondev.lib.tapakasih.util.SessionDialog;
