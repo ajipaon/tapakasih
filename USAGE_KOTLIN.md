@@ -36,11 +36,8 @@ class MyApplication : Application() {
         super.onCreate()
 
         // Inisialisasi TapakAsih SDK
-        val config = TapakAsihConfig.Builder()
-            .setApiKey("YOUR_API_KEY")
-            .setEndpoint("https://api.tapakasih.com")
-            .setSessionTimeout(30 * 60 * 1000) // 30 menit dalam milidetik
-            .setDebugEnabled(true) // Hanya untuk development
+        val config = TapakAsihConfig.Builder("YOUR_DEVELOPER_TOKEN")
+            .setEnableDebugLogs(true) // Hanya untuk development
             .build()
 
         TapakAsih.initialize(this, config)
@@ -58,15 +55,101 @@ Jangan lupa daftarkan Application class di `AndroidManifest.xml`:
 </application>
 ```
 
-## 3. Menggunakan Activity Tracker
+## 3. Mengelola Session ID
 
-### Memulai Tracking Activity
+### Penting: Session ID Harus Di-set Sebelum Tracking
+
+SDK memerlukan Session ID sebelum dapat melakukan tracking. Ada beberapa cara untuk mengaturnya:
+
+#### Opsi 1: Cek dan Tampilkan Dialog (RECOMMENDED)
+
+Panggil di Activity pertama yang dibuka:
 
 ```kotlin
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import com.paondev.lib.tapakasih.TapakAsih
-import com.paondev.lib.tapakasih.network.ActivityRequest
+
+class MainActivity : AppCompatActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+
+        // Cek apakah session ID diperlukan
+        if (TapakAsih.needsSessionId()) {
+            // Tampilkan dialog untuk user input session ID
+            TapakAsih.showSessionDialog()
+        }
+    }
+}
+```
+
+#### Opsi 2: Menggunakan Listener
+
+Set listener di Application class untuk notifikasi otomatis:
+
+```kotlin
+class MyApplication : Application() {
+    override fun onCreate() {
+        super.onCreate()
+
+        val config = TapakAsihConfig.Builder("YOUR_DEVELOPER_TOKEN")
+            .setEnableDebugLogs(true)
+            .build()
+
+        TapakAsih.initialize(this, config)
+
+        // Set listener untuk menangani kebutuhan session ID
+        TapakAsih.setOnSessionRequiredListener(object : TapakAsih.OnSessionRequiredListener {
+            override fun onSessionRequired() {
+                // Di sini Anda bisa:
+                // 1. Tampilkan dialog: TapakAsih.showSessionDialog()
+                // 2. Kirim event ke Activity untuk menampilkan dialog custom
+                // 3. Log untuk debugging
+                Log.d("TapakAsih", "Session ID is required")
+            }
+        })
+    }
+}
+```
+
+#### Opsi 3: Set Session ID Langsung
+
+Jika aplikasi sudah memiliki session ID (misal dari login):
+
+```kotlin
+// Set session ID secara manual
+TapakAsih.setSessionId("user-session-id-123")
+
+// Atau set hanya jika belum ada
+val wasSet = TapakAsih.setSessionIdIfEmpty("default-session-id")
+if (wasSet) {
+    Log.d("TapakAsih", "Session ID was set successfully")
+}
+```
+
+### Mendapatkan Session ID
+
+```kotlin
+val sessionId = TapakAsih.getSessionId()
+Log.d("TapakAsih", "Current Session ID: $sessionId")
+```
+
+### Menghapus Session ID
+
+```kotlin
+// Hapus session ID (logout)
+TapakAsih.clearSessionId()
+```
+
+## 4. Tracking Activity
+
+### Tracking Page Activity
+
+```kotlin
+import android.os.Bundle
+import androidx.appcompat.app.AppCompatActivity
+import com.paondev.lib.tapakasih.TapakAsih
 
 class MainActivity : AppCompatActivity() {
 
@@ -74,90 +157,19 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        // Mulai tracking activity ini
-        val activityRequest = ActivityRequest(
-            activityName = "MainActivity",
-            userId = "user_123",
-            sessionId = TapakAsih.getInstance().getCurrentSessionId(),
-            metadata = mapOf(
-                "screen" to "home",
-                "timestamp" to System.currentTimeMillis()
-            )
-        )
+        // Track page visit
+        TapakAsih.trackPage("MainActivity")
+    }
 
-        TapakAsih.getInstance().trackActivity(activityRequest)
+    override fun onResume() {
+        super.onResume()
+        // Track saat activity resume
+        TapakAsih.trackPage("MainActivity")
     }
 }
 ```
 
-### Tracking Event Kustom
-
-```kotlin
-// Tracking event kustom
-val eventRequest = ActivityRequest(
-    activityName = "ButtonClick",
-    userId = "user_123",
-    sessionId = TapakAsih.getInstance().getCurrentSessionId(),
-    metadata = mapOf(
-        "button_id" to "submit_button",
-        "form_name" to "registration"
-    )
-)
-
-TapakAsih.getInstance().trackActivity(eventRequest)
-```
-
-## 4. Mengelola Session
-
-SDK secara otomatis mengelola session, tapi Anda bisa juga mengontrolnya secara manual:
-
-```kotlin
-// Mendapatkan session ID saat ini
-val currentSessionId = TapakAsih.getInstance().getCurrentSessionId()
-
-// Mengakhiri session secara manual
-TapakAsih.getInstance().endSession()
-
-// Memulai session baru
-TapakAsih.getInstance().startNewSession()
-```
-
-## 5. Mengelola Token
-
-SDK menyimpan token otomatis, tapi Anda bisa mengelola token secara manual:
-
-```kotlin
-// Mendapatkan token yang tersimpan
-val token = TapakAsih.getInstance().getTokenManager().getToken()
-
-// Mengatur token baru
-TapakAsih.getInstance().getTokenManager().setToken("new_token_here")
-
-// Menghapus token (logout)
-TapakAsih.getInstance().getTokenManager().clearToken()
-```
-
-## 6. Penanganan Error dan Callback
-
-Gunakan callback untuk menangani hasil tracking:
-
-```kotlin
-import com.paondev.lib.tapakasih.network.ActivityCheckResponse
-
-TapakAsih.getInstance().trackActivity(activityRequest, object : TapakAsih.Callback {
-    override fun onSuccess(response: ActivityCheckResponse) {
-        // Tracking berhasil
-        Log.d("TapakAsih", "Activity tracked successfully: ${response.message}")
-    }
-
-    override fun onError(error: Exception) {
-        // Terjadi error
-        Log.e("TapakAsih", "Failed to track activity", error)
-    }
-})
-```
-
-## 7. Menggunakan di Fragment
+### Tracking di Fragment
 
 ```kotlin
 class MyFragment : Fragment() {
@@ -165,56 +177,177 @@ class MyFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        val activityRequest = ActivityRequest(
-            activityName = "MyFragment",
-            userId = "user_123",
-            sessionId = TapakAsih.getInstance().getCurrentSessionId(),
-            metadata = mapOf("fragment" to "details")
-        )
-
-        TapakAsih.getInstance().trackActivity(activityRequest)
+        // Track fragment view
+        TapakAsih.trackPage("MyFragment")
     }
 }
 ```
 
-## 8. Konfigurasi Advanced
-
-### Custom Network Timeout
+### Tracking Event Kustom
 
 ```kotlin
-val config = TapakAsihConfig.Builder()
-    .setApiKey("YOUR_API_KEY")
-    .setEndpoint("https://api.tapakasih.com")
-    .setNetworkTimeout(10 * 1000) // 10 detik
-    .setRetryCount(3)
+// Tracking button click
+button.setOnClickListener {
+    TapakAsih.trackPage("ButtonClick-Submit")
+}
+
+// Tracking screen navigation
+navigateToProfile()
+TapakAsih.trackPage("ProfileScreen")
+```
+
+## 5. Status dan Konfigurasi
+
+### Cek Status SDK
+
+```kotlin
+// Cek apakah SDK sudah diinisialisasi
+if (TapakAsih.isInitialized()) {
+    Log.d("TapakAsih", "SDK is initialized")
+}
+
+// Cek apakah session ID diperlukan
+if (TapakAsih.needsSessionId()) {
+    // Handle session requirement
+}
+
+// Mendapatkan konfigurasi
+val config = TapakAsih.getConfig()
+Log.d("TapakAsih", "Debug logs enabled: ${config.isEnableDebugLogs()}")
+```
+
+## 6. Penanganan Error
+
+SDK otomatis menangani error dan mencatat log. Pastikan debug logs diaktifkan saat development:
+
+```kotlin
+val config = TapakAsihConfig.Builder("YOUR_DEVELOPER_TOKEN")
+    .setEnableDebugLogs(BuildConfig.DEBUG) // Hanya debug mode
     .build()
 ```
 
-### Offline Mode
+Error yang mungkin terjadi:
 
-SDK akan otomatis menyimpan event ketika offline dan mengirimnya ketika online:
+- **Session ID tidak ada**: Log akan menampilkan "No session ID, cannot track"
+- **Token expired**: Log akan menampilkan "Developer token is expired, cannot track"
+- **Tracking disabled by server**: Log akan menampilkan "Tracking is disabled by server"
+
+## 7. Contoh Implementasi Lengkap
+
+### Aplikasi Sederhana dengan Tracking
 
 ```kotlin
-val config = TapakAsihConfig.Builder()
-    .setApiKey("YOUR_API_KEY")
-    .setEndpoint("https://api.tapakasih.com")
-    .setMaxOfflineEvents(100) // Maksimal 100 event disimpan offline
-    .build()
+import android.app.Application
+import android.os.Bundle
+import androidx.appcompat.app.AppCompatActivity
+import com.paondev.lib.tapakasih.TapakAsih
+import com.paondev.lib.tapakasih.config.TapakAsihConfig
+
+class MyApplication : Application() {
+    override fun onCreate() {
+        super.onCreate()
+
+        val config = TapakAsihConfig.Builder("YOUR_DEVELOPER_TOKEN")
+            .setEnableDebugLogs(BuildConfig.DEBUG)
+            .build()
+
+        TapakAsih.initialize(this, config)
+    }
+}
+
+class MainActivity : AppCompatActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+
+        // Cek dan tampilkan dialog jika session ID diperlukan
+        if (TapakAsih.needsSessionId()) {
+            TapakAsih.showSessionDialog()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Track page setiap kali activity resume
+        TapakAsih.trackPage("MainActivity")
+    }
+}
 ```
 
-## 9. Best Practices
+### Aplikasi dengan Login dan Session ID dari Backend
+
+```kotlin
+class MyApplication : Application() {
+    override fun onCreate() {
+        super.onCreate()
+
+        val config = TapakAsihConfig.Builder("YOUR_DEVELOPER_TOKEN")
+            .setEnableDebugLogs(BuildConfig.DEBUG)
+            .build()
+
+        TapakAsih.initialize(this, config)
+
+        // Cek apakah user sudah login dan punya session ID
+        val userSessionId = getUserSessionIdFromPreferences()
+        if (userSessionId != null) {
+            TapakAsih.setSessionIdIfEmpty(userSessionId)
+        }
+    }
+
+    private fun getUserSessionIdFromPreferences(): String? {
+        // Ambil session ID dari SharedPreferences atau storage lain
+        val prefs = getSharedPreferences("MyPrefs", MODE_PRIVATE)
+        return prefs.getString("session_id", null)
+    }
+}
+
+class LoginActivity : AppCompatActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_login)
+
+        loginButton.setOnClickListener {
+            performLogin { sessionId ->
+                // Login berhasil, simpan session ID
+                saveSessionId(sessionId)
+                // Set ke TapakAsih SDK
+                TapakAsih.setSessionId(sessionId)
+                // Lanjut ke main activity
+                startActivity(Intent(this, MainActivity::class.java))
+            }
+        }
+    }
+
+    private fun performLogin(callback: (String) -> Unit) {
+        // Implementasi login ke backend
+        // Setelah berhasil, kembalikan session ID
+        callback("user-session-123")
+    }
+
+    private fun saveSessionId(sessionId: String) {
+        val prefs = getSharedPreferences("MyPrefs", MODE_PRIVATE)
+        prefs.edit().putString("session_id", sessionId).apply()
+    }
+}
+```
+
+## 8. Best Practices
 
 ### 1. Inisialisasi Sekali Saja
 
 Inisialisasi SDK hanya sekali di `Application.onCreate()`, jangan inisialisasi berulang kali.
 
-### 2. Gunakan Session ID yang Konsisten
+### 2. Handle Session ID dengan Benar
 
-Gunakan `TapakAsih.getInstance().getCurrentSessionId()` untuk mendapatkan session ID yang konsisten.
+- Selalu cek `TapakAsih.needsSessionId()` sebelum tracking
+- Tampilkan dialog session ID di Activity pertama yang user lihat
+- Set session ID dari login jika aplikasi memiliki sistem auth
 
-### 3. Handle Error dengan Benar
+### 3. Track di Waktu yang Tepat
 
-Selalu gunakan callback untuk menangani error dan memberikan feedback ke user.
+- Track page di `onResume()` untuk mendeteksi setiap kunjungan
+- Gunakan nama page yang jelas dan konsisten
+- Track event penting (button click, navigation, dll)
 
 ### 4. Debug Mode Hanya di Development
 
@@ -222,22 +355,38 @@ Matikan debug mode di production:
 
 ```kotlin
 val isDebug = BuildConfig.DEBUG
-val config = TapakAsihConfig.Builder()
-    .setApiKey("YOUR_API_KEY")
-    .setEndpoint("https://api.tapakasih.com")
-    .setDebugEnabled(isDebug)
+val config = TapakAsihConfig.Builder("YOUR_DEVELOPER_TOKEN")
+    .setEnableDebugLogs(isDebug)
     .build()
 ```
 
 ### 5. Privacy dan Security
 
-- Jangan hardcode API key di production
-- Gunakan secure storage untuk menyimpan sensitive data
+- Jangan hardcode developer token di production
+- Gunakan environment variables atau secure storage
 - Ikuti praktik terbaik untuk handling user data
+- Session ID bisa berisi informasi sensitif, handle dengan hati-hati
 
-## 10. Contoh Implementasi Lengkap
+## 9. Troubleshooting
 
-Lihat file `ExampleUsage.kt` untuk contoh implementasi lengkap.
+### Masalah: App crash saat inisialisasi
+
+**Solusi**: Pastikan Anda tidak memanggil `TapakAsih.showSessionDialog()` di Application class. Panggil di Activity saja.
+
+### Masalah: Tracking tidak berfungsi
+
+**Solusi**: Pastikan:
+
+1. Session ID sudah di-set
+2. Developer token valid dan tidak expired
+3. Server tidak mengirim status `NO_DEMAND`
+
+### Masalah: Dialog tidak muncul
+
+**Solusi**: Pastikan:
+
+1. Anda memanggil `TapakAsih.showSessionDialog()` di Activity (bukan Fragment atau Application)
+2. Activity sudah dalam state onResume() atau onCreate()
 
 ## Support
 

@@ -29,10 +29,23 @@ import java.util.concurrent.Executors;
  *     .build();
  * TapakAsih.initialize(application, config);
  * 
+ * // Check if session ID is needed (in Activity)
+ * if (TapakAsih.needsSessionId()) {
+ *     TapakAsih.showSessionDialog();
+ * }
+ * 
+ * // Or set session listener for automatic handling
+ * TapakAsih.setOnSessionRequiredListener(new TapakAsih.OnSessionRequiredListener() {
+ *     public void onSessionRequired() {
+ *         // Show dialog or handle session requirement
+ *         TapakAsih.showSessionDialog();
+ *     }
+ * });
+ * 
  * // Track page manually
  * TapakAsih.trackPage("MainActivity");
  * 
- * // Set session ID
+ * // Set session ID manually
  * TapakAsih.setSessionId("user-session-id");
  * </pre>
  */
@@ -53,6 +66,17 @@ public class TapakAsih {
     
     private ExecutorService executorService;
     private Handler mainHandler;
+    private OnSessionRequiredListener onSessionRequiredListener;
+    
+    /**
+     * Listener interface for session requirement events
+     */
+    public interface OnSessionRequiredListener {
+        /**
+         * Called when SDK detects that a session ID is required
+         */
+        void onSessionRequired();
+    }
     
     // Private constructor
     private TapakAsih() {
@@ -126,8 +150,9 @@ public class TapakAsih {
         
         Log.i(TAG, "TapakAsih SDK initialized successfully");
         
-        // Check if session ID exists, show dialog if not
-        checkSessionAndShowDialog();
+        // Note: Auto-show dialog removed to prevent BadTokenException
+        // Developers should call showSessionDialog() manually when Activity is ready
+        // or setOnSessionRequiredListener() for custom handling
     }
     
     /**
@@ -159,7 +184,38 @@ public class TapakAsih {
     }
     
     /**
-     * Check if session ID exists and show dialog if not
+     * Check if SDK needs session ID
+     * @return true if session ID is required and not set
+     */
+    public static boolean needsSessionId() {
+        return getInstance().isSessionRequired();
+    }
+    
+    /**
+     * Internal check if session is required
+     */
+    private boolean isSessionRequired() {
+        if (!isInitialized) {
+            Log.w(TAG, "SDK is not initialized");
+            return false;
+        }
+        
+        // Don't require session if token is expired
+        if (tokenManager.isTokenExpired()) {
+            return false;
+        }
+        
+        // Don't require session if tracking is disabled by server
+        if (!trackingEnabled) {
+            return false;
+        }
+        
+        // Check if session ID exists
+        return !sessionManager.hasSessionId();
+    }
+    
+    /**
+     * Check if session ID exists and notify listener if not
      * Note: Dialog is not shown if:
      * - Token is expired (no point requesting session ID if data can't be sent)
      * - Tracking is disabled by server (NO_DEMAND)
@@ -187,8 +243,11 @@ public class TapakAsih {
             @Override
             public void run() {
                 if (!sessionManager.hasSessionId()) {
-                    Log.i(TAG, "No session ID found, showing dialog");
-                    sessionDialog.show();
+                    Log.i(TAG, "No session ID found");
+                    // Notify listener instead of auto-showing dialog
+                    if (onSessionRequiredListener != null) {
+                        onSessionRequiredListener.onSessionRequired();
+                    }
                 } else {
                     Log.i(TAG, "Session ID found: " + sessionManager.getSessionId());
                 }
@@ -228,7 +287,10 @@ public class TapakAsih {
         
         if (!sessionManager.hasSessionId()) {
             Log.w(TAG, "No session ID, cannot track");
-            checkSessionAndShowDialog();
+            // Notify listener that session is required
+            if (onSessionRequiredListener != null) {
+                onSessionRequiredListener.onSessionRequired();
+            }
             return;
         }
         
@@ -346,6 +408,42 @@ public class TapakAsih {
                 sessionDialog.show();
             }
         });
+    }
+    
+    /**
+     * Set session ID if not already set
+     * @param sessionId User's session ID
+     * @return true if session ID was set, false if already exists
+     */
+    public static boolean setSessionIdIfEmpty(String sessionId) {
+        return getInstance().setSessionIfEmpty(sessionId);
+    }
+    
+    /**
+     * Internal set session if empty method
+     */
+    private boolean setSessionIfEmpty(String sessionId) {
+        if (!isInitialized) {
+            Log.w(TAG, "SDK is not initialized");
+            return false;
+        }
+        
+        if (sessionManager.hasSessionId()) {
+            Log.i(TAG, "Session ID already exists, not overwriting");
+            return false;
+        }
+        
+        sessionManager.saveSessionId(sessionId);
+        Log.i(TAG, "Session ID set: " + sessionId);
+        return true;
+    }
+    
+    /**
+     * Set session requirement listener
+     * @param listener Listener to be notified when session ID is required
+     */
+    public static void setOnSessionRequiredListener(OnSessionRequiredListener listener) {
+        getInstance().onSessionRequiredListener = listener;
     }
     
     /**

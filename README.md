@@ -184,25 +184,58 @@ Navigator.push(
 
 When a user installs your app, they need to provide a Session ID obtained from your website.
 
+### Important: Session Dialog is NOT Automatic
+
+**Important Change (v1.0.0+)**: The SDK will NOT automatically show the session dialog on initialization to prevent crashes. You must call `showSessionDialog()` manually when your Activity is ready.
+
 ### Session ID Input
 
-The SDK will automatically show a dialog asking for the Session ID if:
-
-- User has not provided a Session ID
-- Session ID has been cleared
-
-You can also manually show the dialog:
+You need to check if a Session ID is required and show the dialog accordingly:
 
 **Android:**
 
 ```java
-TapAsih.showSessionDialog();
+// In your Activity (e.g., MainActivity)
+if (TapAsih.needsSessionId()) {
+    TapAsih.showSessionDialog();
+}
 ```
 
 **Flutter:**
 
 ```dart
-await TapAsih.showSessionDialog();
+// In your Flutter app
+if (await TapAsih.needsSessionId()) {
+  await TapAsih.showSessionDialog();
+}
+```
+
+### Using Session Listener (Optional)
+
+For more control, you can set a listener to be notified when session ID is required:
+
+**Android:**
+
+```java
+// In Application class
+TapAsih.setOnSessionRequiredListener(new TapAsih.OnSessionRequiredListener() {
+    @Override
+    public void onSessionRequired() {
+        // Handle session requirement
+        // You can show dialog, send event to Activity, etc.
+        TapAsih.showSessionDialog();
+    }
+});
+```
+
+**Flutter:**
+
+```dart
+// In your Flutter app
+TapAsih.setOnSessionRequiredListener(() {
+  // Handle session requirement
+  TapAsih.showSessionDialog();
+});
 ```
 
 ### Set Session ID Programmatically
@@ -267,11 +300,19 @@ final config = TapakAsihConfig(
 // Initialize SDK
 TapAsih.initialize(application, config);
 
+// Check if session ID is needed
+if (TapAsih.needsSessionId()) {
+    TapAsih.showSessionDialog();
+}
+
 // Track page
 TapAsih.trackPage("PageName");
 
 // Set session ID
 TapAsih.setSessionId("session-id");
+
+// Set session ID only if not already set
+boolean wasSet = TapAsih.setSessionIdIfEmpty("default-session-id");
 
 // Get session ID
 String sessionId = TapAsih.getSessionId();
@@ -279,8 +320,11 @@ String sessionId = TapAsih.getSessionId();
 // Check if initialized
 boolean initialized = TapAsih.isInitialized();
 
-// Show session dialog
+// Show session dialog (call this in Activity, not Application)
 TapAsih.showSessionDialog();
+
+// Set session listener
+TapAsih.setOnSessionRequiredListener(listener);
 
 // Clear session ID
 TapAsih.clearSessionId();
@@ -295,11 +339,19 @@ TapAsih.destroy();
 // Initialize SDK
 await TapAsih.initialize(config);
 
+// Check if session ID is needed
+if (await TapAsih.needsSessionId()) {
+  await TapAsih.showSessionDialog();
+}
+
 // Track page
 await TapAsih.trackPage('PageName');
 
 // Set session ID
 await TapAsih.setSessionId('session-id');
+
+// Set session ID only if not already set
+final wasSet = await TapAsih.setSessionIdIfEmpty('default-session-id');
 
 // Get session ID
 final sessionId = await TapAsih.getSessionId();
@@ -309,6 +361,11 @@ final initialized = await TapAsih.isInitialized();
 
 // Show session dialog
 await TapAsih.showSessionDialog();
+
+// Set session listener
+TapAsih.setOnSessionRequiredListener(() {
+  // Handle session requirement
+});
 
 // Clear session ID
 await TapAsih.clearSessionId();
@@ -344,14 +401,16 @@ On first launch, the SDK automatically checks the activity demand status from th
 **Behavior**:
 
 - **ON_DEMAND**: Session ID is required for tracking
-  - SDK will show session dialog if no session ID exists
+  - SDK will notify via listener if session ID doesn't exist
   - Activity tracking is enabled
-  - User must provide session ID to use the app
+  - You must show session dialog manually (e.g., in your Activity)
+  - User must provide session ID to use tracking features
 - **NO_DEMAND**: Session ID is NOT required
-  - SDK will NOT show session dialog
+  - SDK will NOT notify or show session dialog
   - Activity tracking is disabled
   - User can use the app without session ID
   - All `trackPage()` calls are silently ignored
+  - `needsSessionId()` will return false
 
 This check happens once during initialization. If the check fails, the SDK defaults to ON_DEMAND (safer option).
 
@@ -392,12 +451,19 @@ The SDK handles errors gracefully:
 
 ## Troubleshooting
 
+### App crashes on initialization with BadTokenException
+
+**Cause**: Calling `showSessionDialog()` in Application class instead of Activity.
+
+**Solution**: Only call `TapAsih.showSessionDialog()` in your Activity (e.g., in `onCreate()` or `onResume()`). Never call it in Application class.
+
 ### SDK not tracking activities
 
 1. Check if SDK is initialized: `TapAsih.isInitialized()`
 2. Verify developer token is valid
 3. Ensure user has provided Session ID
-4. Check debug logs for errors
+4. Check if session ID is needed: `TapAsih.needsSessionId()`
+5. Check debug logs for errors
 
 ### Data not being sent
 
@@ -408,8 +474,10 @@ The SDK handles errors gracefully:
 
 ### Session dialog not showing
 
-- Check if session ID already exists
+- Make sure you're calling `showSessionDialog()` in an Activity, not Application class
+- Check if session ID already exists: `!TapAsih.needsSessionId()`
 - Ensure SDK is initialized before calling `showSessionDialog()`
+- Verify Activity is in valid state (not finishing/destroyed)
 - Check debug logs for errors
 
 ## License
