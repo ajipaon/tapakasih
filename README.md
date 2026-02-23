@@ -6,6 +6,138 @@ Multi-platform activity tracking SDK for Android and Flutter applications.
 
 TapakAsih SDK is a powerful activity tracking solution that allows developers to monitor user behavior in their applications. The SDK automatically tracks page views and sends activity data to your API endpoint.
 
+## How It Works
+
+TapakAsih SDK uses a dual-mode system based on server response. The behavior depends on what the API returns during the initial activity check.
+
+### Flow Diagram
+
+```
+┌─────────────────────────────────────┐
+│  TapakAsih.initialize()         │
+│  (Developer Token Set)            │
+└─────────────┬───────────────────┘
+              │
+              ↓
+┌─────────────────────────────────────┐
+│  Activity Demand Check (API)       │
+│  GET /activity/check              │
+└─────────────┬───────────────────┘
+              │
+              ↓
+       ┌──────┴──────┐
+       │             │
+   ON_DEMAND    NO_DEMAND
+       │             │
+       ↓             ↓
+┌──────────────┐ ┌──────────────┐
+│ Tracking ON  │ │ Tracking OFF │
+│ Session: REQ │ │ Session: OPT │
+│ Dialog: SHOW │ │ Dialog: HIDE │
+└──────────────┘ └──────────────┘
+```
+
+### Two Modes Explained
+
+#### 1. ON_DEMAND Mode (Tracking Required)
+
+**When Server Returns:**
+
+```json
+{
+  "status": "ON_DEMAND"
+}
+```
+
+**Behavior:**
+
+- ✅ **Tracking is ENABLED** - All `trackPage()` calls send data to API
+- ✅ **Session ID is REQUIRED** - User must provide session ID
+- ✅ **Dialog CAN be shown** - You can call `showSessionDialog()`
+- ⚠️ **No session ID?** - SDK will notify via listener, but dialog won't auto-show
+- 🔔 **Use case** - Server wants to track user activity for analytics
+
+**Code Example:**
+
+```java
+// In Application class
+TapakAsih.initialize(application, config);
+
+// In Activity (when ON_DEMAND)
+if (TapakAsih.needsSessionId()) {
+    TapAsih.showSessionDialog();  // Show built-in dialog
+}
+
+// After user provides session ID
+TapakAsih.trackPage("MainActivity");  // ✓ Will send data to API
+```
+
+#### 2. NO_DEMAND Mode (Tracking Disabled)
+
+**When Server Returns:**
+
+```json
+{
+  "status": "NO_DEMAND"
+}
+```
+
+**Behavior:**
+
+- ❌ **Tracking is DISABLED** - All `trackPage()` calls are silently ignored
+- ❌ **Session ID is OPTIONAL** - User can use app without session ID
+- ❌ **Dialog NEVER shows** - Even if you call `showSessionDialog()`
+- ⚠️ **No session ID?** - SDK won't notify or show dialog
+- 🔔 **Use case** - Server doesn't need tracking data (maintenance, beta test, etc.)
+
+**Code Example:**
+
+```java
+// In Application class
+TapakAsih.initialize(application, config);
+
+// In Activity (when NO_DEMAND)
+if (TapakAsih.needsSessionId()) {
+    // Returns FALSE - no need to show dialog
+}
+
+TapakAsih.trackPage("MainActivity");  // ✗ Silently ignored
+```
+
+### Decision Tree
+
+```
+Is SDK Initialized?
+    │
+    ├── NO ──→ Cannot track, return
+    │
+    └── YES
+        │
+        ↓
+    Is Tracking Enabled? (from API)
+        │
+        ├── NO (NO_DEMAND) ──→ Ignore all trackPage() calls
+        │                         └─ needsSessionId() returns FALSE
+        │
+        └── YES (ON_DEMAND)
+            │
+            ↓
+        Has Session ID?
+            │
+            ├── NO ──→ Notify listener: onSessionRequired()
+            │           └─ Developer must show dialog or custom UI
+            │
+            └── YES ──→ Send tracking data to API
+```
+
+### Key Points
+
+1. **Initial Check Happens Once** - During `initialize()`, SDK checks activity demand status
+2. **Mode is Cached** - Status is cached for app lifetime (no repeated API calls)
+3. **Dialog is Manual** - SDK never auto-shows dialog (prevents crashes)
+4. **Listener is Optional** - Use `OnSessionRequiredListener` for custom UI handling
+5. **Fallback is ON_DEMAND** - If API check fails, SDK defaults to ON_DEMAND (safer)
+
 ## Features
 
 - 🚀 **Automatic Activity Tracking** - Track all user activities automatically
@@ -135,18 +267,37 @@ public class MyApplication extends Application {
 }
 ```
 
-2. Track pages (automatic via lifecycle):
+2. Add Application class to AndroidManifest.xml:
+
+```xml
+<application
+    android:name=".MyApplication"
+    android:allowBackup="true"
+    ... >
+    ...
+</application>
+```
+
+3. Track pages (automatic via lifecycle):
 
 ```java
 // Automatic tracking is enabled by default
 // No additional code needed for basic activity tracking
 ```
 
-3. Manual tracking (optional):
+4. Manual tracking (optional):
 
 ```java
 TapakAsih.trackPage("CustomPageName");
 ```
+
+5. **Important Notes:**
+
+- ✅ **Developer Token**: Set in code, never exposed to users
+- ✅ **Session ID**: User-provided, obtained from your website
+- ⚠️ **Dialog**: Only shows if server returns **ON_DEMAND** and no session ID exists
+- ⚠️ **NO_DEMAND**: If server returns NO_DEMAND, tracking is disabled, no session needed
+- ⚠️ **Never call `showSessionDialog()` in Application class!** It will crash.
 
 ### Flutter
 
@@ -180,23 +331,49 @@ Navigator.push(
 });
 ```
 
+3. **Important Notes:**
+
+- ✅ **Developer Token**: Set in code, never exposed to users
+- ✅ **Session ID**: User-provided, obtained from your website
+- ⚠️ **Dialog**: Only shows if server returns **ON_DEMAND** and no session ID exists
+- ⚠️ **NO_DEMAND**: If server returns NO_DEMAND, tracking is disabled, no session needed
+
 ## Session Management
 
-When a user installs your app, they need to provide a Session ID obtained from your website.
+Session ID is user-specific identifier that links tracking data to individual users. Users obtain their Session ID from your website.
 
-### Important: Session Dialog is NOT Automatic
+### When is Session ID Required?
 
-**Important Change (v1.0.0+)**: The SDK will NOT automatically show the session dialog on initialization to prevent crashes. You must call `showSessionDialog()` manually when your Activity is ready.
+Session ID requirement depends on the **Activity Demand Check** result:
 
-### Session ID Input
+| Mode          | Tracking    | Session ID Required | Dialog Behavior    |
+| ------------- | ----------- | ------------------- | ------------------ |
+| **ON_DEMAND** | ✅ Enabled  | ✅ Yes              | ✅ Can show dialog |
+| **NO_DEMAND** | ❌ Disabled | ❌ No               | ❌ Dialog hidden   |
 
-You need to check if a Session ID is required and show the dialog accordingly:
+### Built-in Session Dialog
+
+SDK provides a built-in dialog for collecting Session ID. This dialog will **only appear** when:
+
+1. ✅ Server returned **ON_DEMAND**
+2. ✅ Session ID doesn't exist yet
+3. ✅ You manually call `showSessionDialog()` in an Activity
+
+**⚠️ Important:** Dialog will **NOT** show if:
+
+- Server returned **NO_DEMAND**
+- Session ID already exists
+- Developer token is expired
+- Called in Application class (will crash)
+
+#### Showing the Built-in Dialog
 
 **Android:**
 
 ```java
-// In your Activity (e.g., MainActivity)
+// In your Activity (e.g., MainActivity.onCreate())
 if (TapAsih.needsSessionId()) {
+    // Only shows if ON_DEMAND and no session ID exists
     TapAsih.showSessionDialog();
 }
 ```
@@ -206,13 +383,16 @@ if (TapAsih.needsSessionId()) {
 ```dart
 // In your Flutter app
 if (await TapAsih.needsSessionId()) {
+  // Only shows if ON_DEMAND and no session ID exists
   await TapAsih.showSessionDialog();
 }
 ```
 
-### Using Session Listener (Optional)
+**⚠️ CRITICAL:** Never call `showSessionDialog()` in Application class! It will crash with `BadTokenException`.
 
-For more control, you can set a listener to be notified when session ID is required:
+### Using Session Listener for Custom UI
+
+If you prefer to build your own UI for Session ID input, use the listener pattern:
 
 **Android:**
 
@@ -221,9 +401,11 @@ For more control, you can set a listener to be notified when session ID is requi
 TapAsih.setOnSessionRequiredListener(new TapAsih.OnSessionRequiredListener() {
     @Override
     public void onSessionRequired() {
-        // Handle session requirement
-        // You can show dialog, send event to Activity, etc.
-        TapAsih.showSessionDialog();
+        // Only called when ON_DEMAND and no session ID
+        // Launch your custom Activity or show custom UI here
+        Intent intent = new Intent(context, CustomSessionActivity.class);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        context.startActivity(intent);
     }
 });
 ```
@@ -233,23 +415,70 @@ TapAsih.setOnSessionRequiredListener(new TapAsih.OnSessionRequiredListener() {
 ```dart
 // In your Flutter app
 TapAsih.setOnSessionRequiredListener(() {
-  // Handle session requirement
-  TapAsih.showSessionDialog();
+  // Only called when ON_DEMAND and no session ID
+  // Navigate to your custom session screen
+  Navigator.pushNamed(context, '/session');
 });
 ```
 
-### Set Session ID Programmatically
+### Setting Session ID Programmatically
+
+If you have your own authentication system (e.g., login), you can set Session ID directly:
 
 **Android:**
 
 ```java
-TapAsih.setSessionId("user-session-123");
+// After user logs in
+String userSessionId = getUserSessionFromBackend();
+TapAsih.setSessionId(userSessionId);
 ```
 
 **Flutter:**
 
 ```dart
-await TapAsih.setSessionId('user-session-123');
+// After user logs in
+final userSessionId = await getUserSessionFromBackend();
+await TapAsih.setSessionId(userSessionId);
+```
+
+### Conditional Session ID Set
+
+Use `setSessionIdIfEmpty()` to set a default Session ID only if user hasn't provided one:
+
+**Android:**
+
+```java
+// Set default session ID for anonymous users
+boolean wasSet = TapAsih.setSessionIdIfEmpty("anonymous-default-session");
+```
+
+**Flutter:**
+
+```dart
+// Set default session ID for anonymous users
+final wasSet = await TapAsih.setSessionIdIfEmpty('anonymous-default-session');
+```
+
+### Session ID Lifecycle
+
+```
+App Install
+    ↓
+[No Session ID]
+    ↓
+SDK Checks: ON_DEMAND?
+    ↓
+    ├── YES → Notify listener / Show dialog
+    │           ↓
+    │       User inputs Session ID
+    │           ↓
+    │       [Session ID Saved]
+    │           ↓
+    │       Tracking Enabled
+    │
+    └── NO → Tracking Disabled (no session needed)
+                ↓
+            User can use app without session ID
 ```
 
 ## Data Sent to API
@@ -268,6 +497,471 @@ The SDK sends the following data to `https://api.pycompany.com/actifity/claim`:
 
 - `Content-Type: application/json`
 - `Authorization: Bearer {developer_token}`
+
+## Complete Usage Examples
+
+### Example 1: Built-in Dialog (Simplest)
+
+**Use case:** Quick setup with built-in session dialog.
+
+**1. Application Class:**
+
+```java
+public class MyApplication extends Application {
+    @Override
+    public void onCreate() {
+        super.onCreate();
+
+        // Initialize SDK with developer token
+        TapakAsihConfig config = new TapakAsihConfig.Builder("your_developer_token")
+            .setEnableDebugLogs(true)
+            .build();
+
+        TapakAsih.initialize(this, config);
+    }
+}
+```
+
+**2. MainActivity:**
+
+```java
+public class MainActivity extends AppCompatActivity {
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+
+        // Check if session ID is required (only if ON_DEMAND)
+        if (TapakAsih.needsSessionId()) {
+            // Show built-in dialog
+            // Dialog will only appear if server returned ON_DEMAND
+            TapakAsih.showSessionDialog();
+        }
+
+        // Track page manually
+        TapakAsih.trackPage("MainActivity");
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+
+        // Track page onResume
+        TapakAsih.trackPage("MainActivity");
+    }
+}
+```
+
+**3. AndroidManifest.xml:**
+
+```xml
+<application
+    android:name=".MyApplication"
+    android:allowBackup="true"
+    ... >
+    ...
+</application>
+```
+
+### Example 2: Custom UI with Listener
+
+**Use case:** Build your own session input UI with Jetpack Compose.
+
+**1. Application Class:**
+
+```java
+public class MyApplication extends Application {
+    @Override
+    public void onCreate() {
+        super.onCreate();
+
+        TapakAsihConfig config = new TapakAsihConfig.Builder("your_developer_token")
+            .setEnableDebugLogs(true)
+            .build();
+
+        TapakAsih.initialize(this, config);
+
+        // Set listener for custom UI handling
+        TapakAsih.setOnSessionRequiredListener(new TapakAsih.OnSessionRequiredListener() {
+            @Override
+            public void onSessionRequired() {
+                // Called when ON_DEMAND and no session ID exists
+                // You can send event to Activity or show custom UI here
+                // Example: Launch custom session screen
+                Intent intent = new Intent(getApplicationContext(), SessionInputActivity.class);
+                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(intent);
+            }
+        });
+    }
+}
+```
+
+**2. SessionInputActivity (Kotlin with Jetpack Compose):**
+
+```kotlin
+class SessionInputActivity : AppCompatActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        setContent {
+            SessionInputScreen(
+                onSessionSubmitted = { sessionId ->
+                    // Save session ID to SDK
+                    TapakAsih.setSessionId(sessionId)
+
+                    // Navigate to main app
+                    startActivity(Intent(this, MainActivity::class.java))
+                    finish()
+                }
+            )
+        }
+    }
+}
+
+@Composable
+fun SessionInputScreen(
+    onSessionSubmitted: (String) -> Unit
+) {
+    var sessionId by remember { mutableStateOf("") }
+    var showError by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        elevation = CardDefaults.cardElevation(4.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(24.dp)
+                .fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "Masukkan Session ID",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                text = "Silakan masukkan Session ID dari website kami",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            OutlinedTextField(
+                value = sessionId,
+                onValueChange = {
+                    sessionId = it
+                    showError = false
+                },
+                label = { Text("Session ID") },
+                isError = showError,
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                supportingText = if (showError) {
+                    { Text("Session ID tidak boleh kosong") }
+                } else null
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Button(
+                onClick = {
+                    if (sessionId.isNotBlank()) {
+                        onSessionSubmitted(sessionId.trim())
+                    } else {
+                        showError = true
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = sessionId.isNotBlank()
+            ) {
+                Text("Simpan")
+            }
+        }
+    }
+}
+```
+
+**3. MainActivity:**
+
+```java
+public class MainActivity extends AppCompatActivity {
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+
+        // No need to check needsSessionId() here
+        // Custom UI is handled by listener in Application class
+
+        // Track page
+        TapakAsih.trackPage("MainActivity");
+    }
+}
+```
+
+### Example 3: Manual Session ID from Login
+
+**Use case:** Your app has its own authentication system.
+
+**1. Application Class:**
+
+```java
+public class MyApplication extends Application {
+    @Override
+    public void onCreate() {
+        super.onCreate();
+
+        TapakAsihConfig config = new TapakAsihConfig.Builder("your_developer_token")
+            .setEnableDebugLogs(true)
+            .build();
+
+        TapakAsih.initialize(this, config);
+
+        // Check if user is already logged in
+        String userSessionId = getUserSessionFromStorage();
+        if (userSessionId != null) {
+            // Set session ID from your auth system
+            TapakAsih.setSessionId(userSessionId);
+        }
+    }
+
+    private String getUserSessionFromStorage() {
+        SharedPreferences prefs = getSharedPreferences("AuthPrefs", MODE_PRIVATE);
+        return prefs.getString("user_session_id", null);
+    }
+}
+```
+
+**2. LoginActivity:**
+
+```java
+public class LoginActivity extends AppCompatActivity {
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_login);
+    }
+
+    private void onLoginSuccess(String userSessionId) {
+        // Save to your auth system
+        saveUserSession(userSessionId);
+
+        // Set to TapakAsih SDK
+        TapakAsih.setSessionId(userSessionId);
+
+        // Navigate to main app
+        startActivity(new Intent(this, MainActivity.class));
+        finish();
+    }
+
+    private void saveUserSession(String sessionId) {
+        SharedPreferences prefs = getSharedPreferences("AuthPrefs", MODE_PRIVATE);
+        prefs.edit().putString("user_session_id", sessionId).apply();
+    }
+}
+```
+
+**3. MainActivity:**
+
+```java
+public class MainActivity extends AppCompatActivity {
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+
+        // Session ID is already set from login system
+        // No need to show dialog
+
+        // Track page
+        TapakAsih.trackPage("MainActivity");
+    }
+}
+```
+
+**4. Logout (Optional):**
+
+```java
+public void logout() {
+    // Clear your auth system
+    SharedPreferences prefs = getSharedPreferences("AuthPrefs", MODE_PRIVATE);
+    prefs.edit().remove("user_session_id").apply();
+
+    // Clear TapakAsih session
+    TapakAsih.clearSessionId();
+
+    // Navigate to login
+    startActivity(new Intent(this, LoginActivity.class));
+    finish();
+}
+```
+
+## Custom Session UI
+
+If you prefer to build your own UI for session ID input instead of using the built-in dialog, here are some examples:
+
+### Jetpack Compose Example
+
+```kotlin
+@Composable
+fun SessionInputDialog(
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit
+) {
+    var sessionId by remember { mutableStateOf("") }
+    var isError by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Session ID Required") },
+        text = {
+            Column {
+                Text(
+                    "Please enter your Session ID from our website to continue.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = sessionId,
+                    onValueChange = {
+                        sessionId = it
+                        isError = false
+                    },
+                    label = { Text("Session ID") },
+                    isError = isError,
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    supportingText = if (isError) {
+                        { Text("Session ID cannot be empty") }
+                    } else null
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (sessionId.isBlank()) {
+                        isError = true
+                    } else {
+                        onSave(sessionId.trim())
+                    }
+                },
+                enabled = sessionId.isNotBlank()
+            ) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+// Usage in your Activity
+setContent {
+    EMoneyCheckerTheme {
+        if (TapakAsih.needsSessionId()) {
+            SessionInputDialog(
+                onDismiss = { /* Handle dismiss */ },
+                onSave = { sessionId ->
+                    TapakAsih.setSessionId(sessionId)
+                    // Navigate to main app
+                }
+            )
+        }
+    }
+}
+```
+
+### Traditional Android (XML) Example
+
+```xml
+<!-- res/layout/dialog_session_input.xml -->
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="24dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Enter Session ID"
+        android:textSize="18sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Please enter your Session ID from our website" />
+
+    <EditText
+        android:id="@+id/sessionIdInput"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:hint="Session ID"
+        android:inputType="text" />
+
+    <Button
+        android:id="@+id/saveButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="Save" />
+
+</LinearLayout>
+```
+
+```java
+// In your Activity
+public void showCustomSessionDialog() {
+    AlertDialog.Builder builder = new AlertDialog.Builder(this);
+    builder.setTitle("Session ID Required");
+
+    // Inflate custom layout
+    View dialogView = getLayoutInflater().inflate(R.layout.dialog_session_input, null);
+    EditText sessionIdInput = dialogView.findViewById(R.id.sessionIdInput);
+    Button saveButton = dialogView.findViewById(R.id.saveButton);
+
+    builder.setView(dialogView);
+
+    // Create dialog
+    AlertDialog dialog = builder.create();
+
+    saveButton.setOnClickListener(v -> {
+        String sessionId = sessionIdInput.getText().toString().trim();
+        if (sessionId.isEmpty()) {
+            Toast.makeText(this, "Session ID cannot be empty", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        // Save to SDK
+        TapakAsih.setSessionId(sessionId);
+
+        // Dismiss dialog
+        dialog.dismiss();
+
+        // Navigate to main app
+        startActivity(new Intent(this, MainActivity.class));
+        finish();
+    });
+
+    dialog.show();
+}
+```
 
 ## Configuration Options
 
@@ -418,10 +1112,45 @@ This check happens once during initialization. If the check fails, the SDK defau
 
 The SDK handles errors gracefully:
 
-- **Network Errors**: Automatic retry with exponential backoff
-- **Expired Token**: SDK automatically stops sending data (no user action needed)
-- **Missing Session ID**: Shows dialog to user automatically
-- **Offline Mode**: Queues data for later transmission
+### Network Errors
+
+- **Behavior**: Automatic retry with exponential backoff
+- **Impact**: No user action needed, SDK will retry automatically
+- **Configurable**: Retry attempts can be configured via `setRetryAttempts()`
+
+### Expired Developer Token
+
+- **Behavior**: SDK automatically stops sending data
+- **Impact**: All `trackPage()` calls are silently ignored
+- **Solution**: Update developer token in your app's code, SDK will resume automatically
+- **Note**: Session ID is NOT required when token is expired
+
+### Missing Session ID
+
+**Depends on Mode:**
+
+- **ON_DEMAND Mode**:
+  - SDK notifies via `OnSessionRequiredListener` if set
+  - You must manually call `showSessionDialog()` or show custom UI
+  - All `trackPage()` calls fail until session ID is provided
+  - **Important**: Dialog does NOT auto-show (prevents crashes)
+
+- **NO_DEMAND Mode**:
+  - No notification, no dialog
+  - Tracking is disabled anyway, session ID is not needed
+  - App works normally without session ID
+
+### Offline Mode
+
+- **Behavior**: Queues tracking data for later transmission
+- **Impact**: No data loss, all queued data will be sent when online
+- **Solution**: No action needed, SDK handles automatically
+
+### Activity Demand Check Failure
+
+- **Behavior**: Defaults to ON_DEMAND mode (safer option)
+- **Impact**: Tracking will be enabled even if check fails
+- **Solution**: Check network connectivity, ensure API endpoint is accessible
 
 ## Requirements
 
@@ -459,26 +1188,196 @@ The SDK handles errors gracefully:
 
 ### SDK not tracking activities
 
-1. Check if SDK is initialized: `TapAsih.isInitialized()`
-2. Verify developer token is valid
-3. Ensure user has provided Session ID
-4. Check if session ID is needed: `TapAsih.needsSessionId()`
-5. Check debug logs for errors
+**Check the following in order:**
+
+1. ✅ **Is SDK initialized?**
+
+   ```java
+   if (!TapAsih.isInitialized()) {
+       // SDK not initialized
+   }
+   ```
+
+2. ✅ **Is tracking enabled?** (Server returned ON_DEMAND?)
+   - If server returned **NO_DEMAND**, tracking is disabled by design
+   - Check debug logs: Look for "Tracking is disabled by server" or "Tracking is enabled by server"
+   - This is expected behavior when server doesn't need data
+
+3. ✅ **Is developer token valid?**
+   - Check if token is expired
+   - Verify token matches your website's dashboard
+   - If expired, update token in your app's code
+
+4. ✅ **Does user have Session ID?**
+
+   ```java
+   if (TapAsih.needsSessionId()) {
+       // No session ID - user must provide it
+   }
+   ```
+
+   - If ON_DEMAND mode: Session ID is REQUIRED
+   - If NO_DEMAND mode: Session ID is NOT required
+
+5. ✅ **Check debug logs**
+   - Enable debug logs: `.setEnableDebugLogs(true)`
+   - Look for error messages
+   - Check if "Failed to track" appears in logs
 
 ### Data not being sent
 
-- Verify developer token is not expired on your website
-- If expired, update token in your app's code (SDK will automatically resume)
-- Ensure network connectivity
-- Check debug logs for API errors
+**Check the following:**
+
+1. ✅ **Verify developer token is not expired**
+   - Check your website's dashboard
+   - If expired, update token in your app's code (SDK will automatically resume)
+
+2. ✅ **Ensure network connectivity**
+   - Device must be online to send data
+   - Check if device has internet access
+   - Offline data is queued and sent when online
+
+3. ✅ **Check if tracking is enabled**
+   - If server returned **NO_DEMAND**, data won't be sent (by design)
+   - Check debug logs for tracking status
+
+4. ✅ **Check debug logs for API errors**
+   - Look for HTTP errors (401, 403, 500, etc.)
+   - Check if "Failed to track" appears in logs
+   - Verify API endpoint is accessible
 
 ### Session dialog not showing
 
-- Make sure you're calling `showSessionDialog()` in an Activity, not Application class
-- Check if session ID already exists: `!TapAsih.needsSessionId()`
-- Ensure SDK is initialized before calling `showSessionDialog()`
-- Verify Activity is in valid state (not finishing/destroyed)
-- Check debug logs for errors
+**Possible causes and solutions:**
+
+1. ✅ **Called in Application class?**
+   - ❌ **CRITICAL ERROR**: Never call `showSessionDialog()` in Application class
+   - ✅ Only call in Activity (e.g., `onCreate()`, `onResume()`)
+
+2. ✅ **Session ID already exists?**
+
+   ```java
+   if (!TapAsih.needsSessionId()) {
+       // Session ID exists - no need to show dialog
+   }
+   ```
+
+3. ✅ **Server returned NO_DEMAND?**
+   - If server returned **NO_DEMAND**, dialog will never show (by design)
+   - This is expected behavior when tracking is disabled
+   - Check debug logs for "Tracking is disabled by server"
+
+4. ✅ **Developer token expired?**
+   - If token is expired, dialog won't show (no point collecting session ID)
+   - Update token in your app's code
+
+5. ✅ **SDK not initialized?**
+
+   ```java
+   if (!TapAsih.isInitialized()) {
+       // Initialize SDK first
+   }
+   ```
+
+6. ✅ **Activity in invalid state?**
+   - Activity might be finishing or destroyed
+   - Check if Activity is still running
+   - Try calling dialog in `onResume()` instead of `onCreate()`
+
+### Understanding ON_DEMAND vs NO_DEMAND
+
+**If you're confused why tracking works sometimes but not others:**
+
+1. **Check debug logs for tracking status:**
+   - "Tracking is enabled by server (ON_DEMAND)" → Session ID required
+   - "Tracking is disabled by server (NO_DEMAND)" → No session needed
+
+2. **Why does server return NO_DEMAND?**
+   - Server doesn't need tracking data right now
+   - Could be: maintenance mode, beta testing, etc.
+   - This is normal and expected
+
+3. **What to do in each mode:**
+
+   **ON_DEMAND:**
+   - ✅ Show session dialog or custom UI
+   - ✅ Collect session ID from user
+   - ✅ Tracking will work after session ID is provided
+   - ✅ All `trackPage()` calls send data to API
+
+   **NO_DEMAND:**
+   - ❌ Don't show session dialog
+   - ❌ Don't collect session ID
+   - ❌ Tracking is disabled (all `trackPage()` calls ignored)
+   - ✅ App works normally without session ID
+
+4. **How to verify current mode:**
+
+   ```java
+   // Check if session ID is needed
+   boolean needsSession = TapAsih.needsSessionId();
+
+   if (needsSession) {
+       // Server returned ON_DEMAND
+       // Show dialog or custom UI
+   } else {
+       // Server returned NO_DEMAND
+       // Don't show dialog
+   }
+   ```
+
+### Dialog shows but tracking doesn't work
+
+**Check the following:**
+
+1. ✅ **Did user provide session ID?**
+   - Check if session ID was saved
+   - `TapAsih.getSessionId()` should return non-null
+
+2. ✅ **Is tracking enabled?**
+   - Check debug logs for tracking status
+   - If NO_DEMAND, tracking won't work (by design)
+
+3. ✅ **Is developer token valid?**
+   - Check if token is expired
+   - If expired, update in app code
+
+4. ✅ **Check debug logs**
+   - Look for "Successfully tracked" or "Failed to track"
+   - Check for API errors (401, 403, 500, etc.)
+
+### How to test if SDK is working correctly
+
+1. **Enable debug logs:**
+
+   ```java
+   .setEnableDebugLogs(true)
+   ```
+
+2. **Check initialization:**
+
+   ```java
+   Log.d("TapakAsih", "Initialized: " + TapAsih.isInitialized());
+   ```
+
+3. **Check tracking status:**
+   - Look for "Tracking is enabled by server" or "Tracking is disabled by server"
+   - This tells you which mode SDK is in
+
+4. **Check session status:**
+
+   ```java
+   Log.d("TapakAsih", "Needs Session: " + TapAsih.needsSessionId());
+   Log.d("TapakAsih", "Session ID: " + TapAsih.getSessionId());
+   ```
+
+5. **Test tracking:**
+   ```java
+   TapAsih.trackPage("TestPage");
+   ```
+
+   - Check logs for "Successfully tracked: TestPage"
+   - If "Failed to track", check why (no session ID, tracking disabled, etc.)
 
 ## License
 
